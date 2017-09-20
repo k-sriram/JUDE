@@ -220,7 +220,7 @@ pro jude_centroid, events_file, grid2, params, xstar, ystar, $
 				while (max(g2) eq 0)do begin
 					par.min_frame = par.min_frame + par.fine_bin
 					par.max_frame = par.min_frame + par.fine_bin
-					print,par.min_frame,string(13b),format="(i6,a,$)"
+					print,par.min_frame,string(10b),format="(i6,a,$)"
 					nframes = jude_add_frames(data_l2, g2, pixel_time,  par, $
 						xoff*params.resolution, $
 						yoff*params.resolution, /notime)
@@ -257,7 +257,7 @@ pro jude_centroid, events_file, grid2, params, xstar, ystar, $
 	end_frame   = params.max_frame
 	for i=1l, ngrid - 1 do begin
 		print,i*nbin,ngrid*nbin,data_l2[i*nbin].time - data_l2[0].time,$
-				string(13b),format="(i7,i7,i10,a,$)"
+				string(10b),format="(i7,i7,i10,a,$)"
 		params.min_frame = start_frame + i*nbin
 		params.max_frame = params.min_frame + nbin - 1
 		dqi = where(data_l2[params.min_frame:params.max_frame].dqi eq 0,ndqi)

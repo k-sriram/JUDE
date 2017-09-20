@@ -192,7 +192,7 @@ tstart = systime(1)
 for ielem = min_frame,max_frame do begin
 if (not(keyword_set(notime)) and ((ielem mod 100) eq 0)) then begin
 	tleft = (systime(1) - tstart)/(ielem - min_frame)*(max_frame - ielem)
-	print,ielem, max_frame,tleft,string(13b),format="(i7,i7,i7,a,$)"
+	print,ielem, max_frame,tleft,string(10b),format="(i7,i7,i7,a,$)"
 endif
 
 ;Only if frame meets all the conditions
@@ -219,7 +219,7 @@ endif
 		
 		if (n_elements(debug) eq 1)then begin
 			if ((ielem mod debug) eq 0)then begin
-				print,ielem, data[ielem].time-data[0].time, string(13b),$
+				print,ielem, data[ielem].time-data[0].time, string(10b),$
 						format="(i7,i10,a,$)"
 				tv,bytscl(rebin(grid,512,512),0,mean(grid)*30)
 			endif

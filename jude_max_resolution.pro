@@ -320,7 +320,7 @@ star_fname = "star_" + strmid(events_file,f1+f3,f2-f1-f3)+".txt"
 				endif	
 			endif
 		
-		print,itest,random_multiplier,mean_old,mean_val,string(13b),$
+		print,itest,random_multiplier,mean_old,mean_val,string(10b),$
 				format="(i8,f8.4, 1x, f8.3, 1x, f8.3, a, $)"
 			
 		endfor

@@ -251,7 +251,7 @@ pro jude_driver_uv, data_dir,$
 		if (check_bod eq exit_failure)then sxaddhist,"No BOD done",out_hdr
 
 ;******************************HOUSEKEEPING and ATTITUDE*********************
-		print,"Begin HK",string(13b),format="(a, a, $)"
+		print,"Begin HK",string(10b),format="(a, a, $)"
 		success  = JUDE_READ_HK_FILES(data_dir, file(ifile), data_hdr0, hk, att, out_hdr)
 		if (success eq exit_failure)then begin
 			JUDE_ERR_PROCESS,error_file,"No housekeeping data in file"
@@ -268,7 +268,7 @@ pro jude_driver_uv, data_dir,$
 
 ;********************************PHOTON EVENTS*****************************
 ;First extract photons and then get pointing offsets
-print,"Begin event processing",string(13b),format="(a, a, $)"
+print,"Begin event processing",string(10b),format="(a, a, $)"
 		success = JUDE_GET_XY(data_l1, data_l1a, data_l2, out_hdr)
 		par = params
 		success = JUDE_CNVT_ATT_XY(data_l2, out_hdr, xoff_sc, yoff_sc,$
@@ -325,7 +325,7 @@ if (do_not_do_this eq 0)then begin
 ;The registration takes time and has largely been superceded so I don't do it 
 ;by default. Note that there are occasional problems with SRCOR.
 ;*************************DATA REGISTRATION*******************************
-print,"Begininning Registration",string(13b),format="(a, a, $)"
+print,"Begininning Registration",string(10b),format="(a, a, $)"
 	if (keyword_set(fuv))then mask_threshold = params.ps_threshold_fuv else $
 						   mask_threshold = params.ps_threshold_nuv
 ;Point source registration

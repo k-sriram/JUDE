@@ -53,7 +53,7 @@ for ifile = start_file, nfiles - 1 do begin
 	tst = file_test(t+"*")
 
 	if ((tst eq 0) or (overwrite eq 1))then begin  
-		print,ifile,fname,string(13b),format="(i5,1x,a,a,$)"
+		print,ifile,fname,string(10b),format="(i5,1x,a,a,$)"
 		restore,file(ifile)
 		nframes =n_elements(grid(0,0,*))
 	

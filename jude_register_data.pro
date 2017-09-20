@@ -260,7 +260,7 @@ function jude_register_data, data, data_hdr, params, $
 			endelse;Line 242
 			x1(ielem) =   xopt
 			y1(ielem) =   yopt
-			print,par.min_frame,par.max_frame,xopt,yopt,string(13b),$
+			print,par.min_frame,par.max_frame,xopt,yopt,string(10b),$
 					format="(i7, 2x, i7, f8.2, 2x, f8.2,a,$)"
 			
 		endif else begin ;if there is no good data - line 168

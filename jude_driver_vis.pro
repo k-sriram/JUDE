@@ -99,12 +99,12 @@ pro jude_driver_vis, data_dir,$
 ;Begin actual program. First read the Level 1 data and create save sets.
 ;Then find offsets between save sets.
 ;Finally add together to produce visible images.
-print,"Reading VIS files",string(13b),format="(a,a,$)"
+print,"Reading VIS files",string(10b),format="(a,a,$)"
 	jude_read_vis, file, params.vis_L2_dir, start_file = start_file, overwrite = overwrite
-print,"Finding Shifts",string(13b),format="(a,a,$)"
+print,"Finding Shifts",string(10b),format="(a,a,$)"
 	jude_vis_shifts, params.vis_L2_dir, params.vis_off_dir,$
 			overwrite = overwrite
-print,"Adding files",string(13b),format="(a,a,$)"
+print,"Adding files",string(10b),format="(a,a,$)"
 	jude_add_vis, params.vis_L2_dir, params.vis_off_dir, params.vis_add_dir, $
 			overwrite = overwrite
 done:

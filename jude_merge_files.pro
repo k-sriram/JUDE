@@ -97,7 +97,7 @@ l2_files	= l2_files[iorder]
 tstart		= tstart[iorder]
 tend		= tend[iorder]
 
-print,"Checking for duplicates.",string(13b),format="(a,a,$)"
+print,"Checking for duplicates.",string(10b),format="(a,a,$)"
 restart:
 
 ;In this loop, we delete all the files that are enclosed in another
@@ -154,7 +154,7 @@ for ifile = 0, nfiles - 2 do begin
 				(tend[jfile] gt tend[ifile]))
 		if (tst eq 1)then begin
 			str = "Merging " + filei + " with " + filej
-			print,str,string(13b),format="(a,a,$)"
+			print,str,string(10b),format="(a,a,$)"
 			printf,log_lun,str
 			if ((l2_file_rm[ifile] eq 0) and (l2_file_rm[jfile] eq 0))then begin
 				datai = mrdfits(filei, 1, hdri, /silent)

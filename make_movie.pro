@@ -84,7 +84,7 @@ pro make_movie, events_file, params, max_im_value = max_im_value, nbin=nbin, $
 	end_frame   = params.max_frame
 	for i=1l, ngrid - 1 do begin
 		print,i*nbin,ngrid*nbin,data_l2[i*nbin].time - data_l2[0].time,$
-				string(13b),format="(i7,i7,i10,a,$)"
+				string(10b),format="(i7,i7,i10,a,$)"
 		params.min_frame = start_frame + i*nbin
 		params.max_frame = params.min_frame + nbin - 1
 		nframes = jude_add_frames(data_l2, grid2, pixel_time,  params, $

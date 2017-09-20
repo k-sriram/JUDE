@@ -55,7 +55,7 @@ pro jude_vis_shifts, data_dir, offset_dir, start_file = start_file, $
 
 ;List of offsets. All offsets with the same base are appended.
 		fname = file_basename(file(ifile))
-		print,ifile,fname,string(13b),format="($,i5,1x,a,a)"
+		print,ifile,fname,string(10b),format="($,i5,1x,a,a)"
 		fname = strmid(fname, 0, strlen(fname) - 4)
 		offname = strcompress(offset_dir +fname + ".offsets", /rem)
 		tst = file_test(offname)

@@ -39,7 +39,7 @@ pro jude_obs_log, output_file, uv_base_dir, params
 ;Header titles
 	printf,obs_lun,"Level2 Source Filter OBSDATE TSTART TEND RA DEC Exp_Time Good_time IM_Exp"
 	for ifile = 0, nfiles - 1 do begin
-		print,ifile," of ",nfiles-1,string(13b),format="(i5,a,i5, a, $)"
+		print,ifile," of ",nfiles-1,string(10b),format="(i5,a,i5, a, $)"
 
 ;Check to see if Level2 file exists
 		l2_file = files[ifile]		
