@@ -257,7 +257,7 @@ pro jude_centroid, events_file, grid2, params, xstar, ystar, $
 	end_frame   = params.max_frame
 	for i=1l, ngrid - 1 do begin
 		print,i*nbin,ngrid*nbin,data_l2[i*nbin].time - data_l2[0].time,$
-				string(10b),format="(i7,i7,i10,a,$)"
+				string(13b),format="(i7,i7,i10,a,$)"
 		params.min_frame = start_frame + i*nbin
 		params.max_frame = params.min_frame + nbin - 1
 		dqi = where(data_l2[params.min_frame:params.max_frame].dqi eq 0,ndqi)
