@@ -18,6 +18,11 @@
 ;	JM:	Sept 11, 2016
 ;	JM: May  22, 2017:	V 3.1
 ;	JM: Sep. 15, 2017: Gzip files after creation.
+;	JM: Oct. 19, 2017: Typo in gzipping files.
+;	JM: Nov.  8, 2017: Explicitly free memory
+;	JM: Nov.  9, 2017 : I don't want to repeat checks of the same file.
+;	JM: Nov.  9, 2017 : Assume all successful files are gzipped.
+
 ;COPYRIGHT
 ;Copyright 2016 Jayant Murthy
 ;
@@ -39,7 +44,7 @@ pro jude_add_vis, data_dir, offset_dir, output_dir, $
 	device,window_state = window_state
 
 ;Search for all visible data files in the directory
-file=file_search(data_dir,"*.sav",count = nfiles)
+file=file_search(data_dir,"*.fits*",count = nfiles)
 print,"Total of ", nfiles," VIS files"
 if (keyword_set(overwrite) eq 0)then overwrite = 0
 	
@@ -47,18 +52,23 @@ if (keyword_set(overwrite) eq 0)then overwrite = 0
 if (n_elements(start_file) eq 0)then start_file = 0l
 for ifile = start_file, nfiles - 1 do begin
 
-;Check file existance
+;Check file existence
 	fname = file_basename(file(ifile))
-	t = output_dir + strmid(fname, 0, strlen(fname)-4)
-	tst = file_test(t+"*")
-
-	if ((tst eq 0) or (overwrite eq 1))then begin  
+	fpos  = strpos(fname, "fits")
+	fout = output_dir + strmid(fname, 0, fpos + 4)
+	tst_file = file_test(fout + ".gz");JUDE always produces gzipped files
+	
+	if ((tst_file eq 0) or (overwrite eq 1))then begin  
 		print,ifile,fname,string(10b),format="(i5,1x,a,a,$)"
-		restore,file(ifile)
+		vis_table = mrdfits(file(ifile), 1, vis_hdr,/silent)
+		grid = vis_table.grid
+		times = vis_table.times
 		nframes =n_elements(grid(0,0,*))
 	
 ;Read offsets
-		offset_file = offset_dir + strmid(fname, 0, strlen(fname)-4)+".offsets"
+		fpos = strpos(fname, ".fits")
+		fname = strmid(fname, 0, fpos)
+		offset_file = offset_dir + fname + ".offsets"
 		spawn,"wc -l "+ offset_file,str
 		noff = getwrd(str) - 1
 		if (noff gt 3)then begin
@@ -121,7 +131,7 @@ for ifile = start_file, nfiles - 1 do begin
 				endif
 			endfor
 			im=im/ngood
-			t = output_dir + strmid(fname, 0, strlen(fname)-4) + ".fits"
+			t = output_dir + fname + ".fits"
 			mkhdr, out_hdr, im
 			sxaddpar,out_hdr,"INSTRUME","UVIT"
 			sxaddpar,out_hdr,"DETECTOR", "VIS", "FUV, NUV, or Vis"
@@ -135,8 +145,13 @@ for ifile = start_file, nfiles - 1 do begin
 			sxaddhist,"Copyright 2016 Jayant Murthy",out_hdr,/comment
 			sxaddhist,"http://www.apache.org/licenses/LICENSE-2.0",out_hdr,/comment
 			mwrfits, im, t, out_hdr, /create
-			spawn,"gzip -f ",t
+			spawn,"gzip -f " + t + " &"
 		endif
 	endif
+
+	delvar,im
+	delvar,grid
+	delvar,vis_table
+
 endfor
 end

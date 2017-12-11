@@ -86,6 +86,12 @@
 ;	JM: Aug. 21, 2017 : Changed "Number of frames" to Nframes
 ;	JM: Aug. 27, 2017 : Problem with ref_frame due to repeated calls.
 ;	JM: Aug. 28, 2017 : Was writing header improperly for second extension
+;	JM: Nov.  7, 2017 : Reuse HK data between UV runs for speed increase.
+;	JM: Nov.  8, 2017 : Explicitly free memory.
+;	JM: Nov.  9, 2017 : I don't want to repeat checks of the same file.
+;	JM: Nov.  9, 2017 : Assume all successful files are gzipped.
+;	JM: Nov. 16, 2017 : Skip processing if JUDE_VERIFY_FILES_DONE exists.
+;	JM: Nov. 21, 2017 : Switch to Common Blocks for the Level 1 files.
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -106,13 +112,24 @@ pro jude_driver_uv, data_dir,$
 	fuv = fuv, nuv = nuv, $
 	start_file = start_file, end_file = end_file,$
 	stage2 = stage2, debug = debug, diffuse = diffuse, notime = notime,$
-	overwrite = overwrite		
+	overwrite = overwrite
+	
+COMMON HK_VARS, HK, ATT
+COMMON DATA_VARS, DATA_L1, DATA_L1A, DATA_L2
 
 ;Define bookkeeping variables
 	exit_success = 1
 	exit_failure = 0
 	version_date = "May 24, 2017"
 	print,"Software version: ",version_date
+	hk_base = ""
+	
+;Do not do anything if we've already finished the Level 1 processing
+if (file_test("JUDE_VERIFY_FILES_DONE"))then begin
+	print,"Already completed Level 1 processing"
+	print,"Delete JUDE_VERIFY_FILES_DONE if you really want to reprocess"
+	goto, already_done
+endif
 	
 ;**************************INITIALIZATION**************************
 ;DATA_DIR is the top level directory containing all of the data files. I
@@ -133,6 +150,7 @@ pro jude_driver_uv, data_dir,$
 		if (ans eq 2)then nuv = 1
 	endif
 	nfiles = JUDE_GET_FILES(data_dir, file, fuv = fuv, nuv = nuv)
+		
 	if (n_elements(start_file) eq 0) then start_file = 0
 	if (n_elements(end_file) eq 0)   then end_file   = nfiles - 1
 
@@ -172,7 +190,7 @@ pro jude_driver_uv, data_dir,$
 
 ;*********************************BEGIN PROCESSING*****************
 	for ifile = start_file, end_file do begin
-
+time0 = systime(1)
 ;File definitions
 		fname 		= file_basename(file(ifile))
 		uvit_fname  = fname
@@ -180,9 +198,14 @@ pro jude_driver_uv, data_dir,$
 		png_name	= png_dir + fname + ".png"
 		image_name	= image_dir + fname + ".fits"
 		events_name = events_dir + fname + "_bin.fits"
-;Don't overwrite files unless explicitly told to.
-		if ((file_test(events_name+"*") eq 1) and (overwrite eq 0))then $
+;Don't overwrite files unless explicitly told to. Note that all
+;JUDE files will be gzipped if complete
+		if ((file_test(events_name + ".gz") eq 1) and $
+			(file_test(image_name  + ".gz") eq 1) and $
+			(overwrite eq 0))then begin           
+			print,"Skipping " + fname,string(13b),format="(a, a, $)"
 			goto, no_process
+		endif
 		obs_str = file[ifile]
 		orig_dir = file_dirname(file[ifile])
 		orig_dir = strmid(orig_dir, strlen(data_dir), $
@@ -238,7 +261,7 @@ pro jude_driver_uv, data_dir,$
 ;Those observations which don't have one may indicate incomplete Level 1 files.
 ;Because of concerns about whether this is a valid check or not, I now process
 ;anyway but note if the BOD is present.
-		check_bod = JUDE_CHECK_BOD(data_l1,data_l1a)
+		check_bod = JUDE_CHECK_BOD()
 		if (check_bod eq exit_failure)then begin
 			JUDE_ERR_PROCESS,error_file,"No BOD in file"
 			print,"No BOD in file"
@@ -249,18 +272,19 @@ pro jude_driver_uv, data_dir,$
 		mkhdr, out_hdr, grid
 		JUDE_CREATE_UVIT_HDR,data_hdr0,out_hdr
 		if (check_bod eq exit_failure)then sxaddhist,"No BOD done",out_hdr
-
+		
 ;******************************HOUSEKEEPING and ATTITUDE*********************
 		print,"Begin HK",string(10b),format="(a, a, $)"
-		success  = JUDE_READ_HK_FILES(data_dir, file(ifile), data_hdr0, hk, att, out_hdr)
+		success  = JUDE_READ_HK_FILES(data_dir, file(ifile), data_hdr0, $
+									  out_hdr, hk_base = hk_base)
 		if (success eq exit_failure)then begin
 			JUDE_ERR_PROCESS,error_file,"No housekeeping data in file"
 			openw,rm_lun,"rm.sh",/get,/append & printf,rm_lun,"rm "+file(ifile) & free_lun,rm_lun
 			goto,no_process
 		endif
-		
+
 ;*********************************DATA VALIDATION**************************
-		success = JUDE_SET_DQI(data_hdr0, data_l1, data_l1a, hk, att,out_hdr)
+		success = JUDE_SET_DQI(data_hdr0, out_hdr)
 		if (success eq 0)then begin
 				JUDE_ERR_PROCESS,error_file,"Problem in jude_set_dqi"
 				goto,no_process
@@ -269,14 +293,14 @@ pro jude_driver_uv, data_dir,$
 ;********************************PHOTON EVENTS*****************************
 ;First extract photons and then get pointing offsets
 print,"Begin event processing",string(10b),format="(a, a, $)"
-		success = JUDE_GET_XY(data_l1, data_l1a, data_l2, out_hdr)
+		success = JUDE_GET_XY(out_hdr)
 		par = params
-		success = JUDE_CNVT_ATT_XY(data_l2, out_hdr, xoff_sc, yoff_sc,$
+		success = JUDE_CNVT_ATT_XY(out_hdr, xoff_sc, yoff_sc,$
 					params = par)
 		if (success eq 0)then begin
 			JUDE_ERR_PROCESS,error_file,"No attitude information from spacecraft"
 		endif
-			
+		
 ;******************************WRITE LEVEL 2 DATA***********************
 		nrows = n_elements(data_l2)
 		fxbhmake,bout_hdr,nrows,/initialize
@@ -286,10 +310,11 @@ print,"Begin event processing",string(10b),format="(a, a, $)"
 		sxaddhist,fname, bout_hdr
 ;The calculated offsets are specific to the resolution. When I save them
 ;I renormalize them to a 512x512 array
-		temp = data_l2
-		temp.xoff = temp.xoff/params.resolution
-		temp.yoff = temp.yoff/params.resolution
-		mwrfits,temp,events_name,bout_hdr,/create,/no_comment
+		data_l2.xoff = data_l2.xoff/params.resolution
+		data_l2.yoff = data_l2.yoff/params.resolution
+		mwrfits,data_l2,events_name,bout_hdr,/create,/no_comment,/silent
+		data_l2.xoff = data_l2.xoff*params.resolution
+		data_l2.yoff = data_l2.yoff*params.resolution
 ;************************LEVEL 2 DATA *********************************
 ;If the Level 2 data exists, I don't have to go through the HK files again.
 ;The goal is to make the Level 2 data self-contained.
@@ -297,9 +322,6 @@ print,"Begin event processing",string(10b),format="(a, a, $)"
 ;scale.
 	endif else begin;Read Level 1 or Level 2 (line 126)
 		data_l2 = mrdfits(file(ifile),1,data_hdr0)
-;Temporary measure
-q = where(data_l2.dqi eq 2, nq)
-if (nq gt 0)then data_l2[q].dqi = 0
 		data_l2.xoff = data_l2.xoff*params.resolution
 		data_l2.yoff = data_l2.yoff*params.resolution
 		;Make the basic header
@@ -422,8 +444,8 @@ endif
 
 ;Calibration factor
 	cal_factor = jude_apply_cal(detector, nom_filter)
-	sxaddpar, out_hdr, "CALF", cal_factor, "Ergs cm-2 s-1 A-1 (cps)-1"
-	sxaddpar, bout_hdr, "CALF", cal_factor, "Ergs cm-2 s-1 A-1 (cps)-1"
+	sxaddpar, out_hdr, "CALF", cal_factor, "Ergs cm-2 s-1 A-1 pixel-1 (cps)-1"
+	sxaddpar, bout_hdr, "CALF", cal_factor, "Ergs cm-2 s-1 A-1 pixel-1 (cps)-1"
 
 ;Information about the original file
 	if (strlen(data_dir) gt 69)then $
@@ -437,15 +459,17 @@ endif
 	else sxaddpar,out_hdr,"ORIGFILE",uvit_fname
 
 ;Write out the image followed by the exposure times
-	mwrfits,grid,image_name,out_hdr,/create
+	mwrfits,grid,image_name,out_hdr,/create,/silent
 	mkhdr, thdr, pixel_time,/image
 	if (keyword_set(notime))then begin
 		sxaddpar,thdr,"BUNIT","Nframes","Exposure map not applied"
 	endif else begin
 		sxaddpar,thdr,"BUNIT","s","Exposure map"
 	endelse
-	mwrfits,pixel_time,image_name,thdr
-	spawn,"gzip -f " + image_name
+	mwrfits,pixel_time,image_name,thdr,/silent
+	if (ifile lt (nfiles - 5)) then begin
+		spawn,"gzip -f " + image_name + " &"
+	endif else spawn,"gzip -f " + image_name
 
 ;Observation log showing which file is associated with each original	
 	obs_str = obs_str + " " + image_name + ".gz" 
@@ -462,17 +486,30 @@ endif
 		sxaddpar,bout_hdr,"ORIGFILE",strmid(fname, 68, 69, /reverse_offset) $
 	else sxaddpar,bout_hdr,"ORIGFILE",fname
 
-	temp = data_l2
-	temp.xoff = temp.xoff/params.resolution
-	temp.yoff = temp.yoff/params.resolution
-	mwrfits,temp,events_name,bout_hdr,/create,/no_comment
-	spawn,"gzip -f " + events_name
-	obs_str = obs_str + " " + events_name + ".gz"	
+	data_l2.xoff = data_l2.xoff/params.resolution
+	data_l2.yoff = data_l2.yoff/params.resolution
+	mwrfits,data_l2,events_name,bout_hdr,/create,/no_comment,/silent
+	data_l2.xoff = data_l2.xoff*params.resolution
+	data_l2.yoff = data_l2.yoff*params.resolution
+	if (ifile lt (nfiles - 5))then begin
+		spawn,"gzip -f " + events_name + " &"
+	endif else spawn,"gzip -f " + events_name + " &"
+	obs_str = obs_str + " " + events_name + ".gz" 
 ;Write file log
 	printf,obs_lun,obs_str
 no_process:
 if (keyword_set(debug))then stop
+	str = "Time taken for file is " + string(systime(1) - time0) + " seconds"
+	print,strcompress(str)
+	
+;Release memory back to the system
+delvar,data_l2
+delvar,grid
+delvar,pixel_time
+delvar,data_l1a
+delvar,data_l1
+
 endfor
 free_lun,obs_lun
-
+already_done:
 end

@@ -2,17 +2,13 @@
 ;Level 2 data photon lists and images.
 ;Type gdl process_uvit.com to run this program.
 
-;The path to the JUDE procedures. 
-;Replace "/home/murthy/idllib/jude:" with the local setup 
-!path = "/home/murthy/idllib/jude:"  + !path; Add JUDE routines to path.
-!path = "/home/murthy/idllib/cmlib:" + !path; Add Markwardt routines
-!path = "/home/murthy/idllib/pro:"   + !path; Add IDLASTRO routines
+;The path to the JUDE procedures. Change to local path.
+!path="/Users/jayanth/Dropbox/jude:"+!path
 
-;This variable points to the location of the data. Either set it here or
-;enter at the command line.
-dname = ""
-dname = "/Volumes/UVIT_Data/uvit/Level1/data/"
-;read,"What is the location of the data: ",dname
+;The next two lines are specific to the local setup. Set dname to the 
+;location of the Level 1 files.
+spawn,"pwd",a
+dname = "/Volumes/UVIT_Data/uvit/Level1" + strmid(a[0], 26)
 
 ;No changes need be made from here on.
 ;Process all the VIS files
@@ -31,7 +27,7 @@ if (nf gt 0)then spawn,"gzip -f fuv/events/*.fits"
 jude_driver_uv,dname,/fuv,/notime
 
 ;Identify and remove bad files.
-jude_verify_files,dname
+jude_verify_Files,dname
 
 ;Merge the data and run the automated registration. Should work in most cases.
 jude_uv_cleanup,/nuv

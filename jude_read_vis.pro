@@ -10,8 +10,14 @@
 ;	Save files are written to the specified directory.
 ;MODIFICATION HISTORY
 ;	JM:	Sept 8, 2016
-;	JM: May 23, 2017 Version 3.1
-;	JM: Jun 27, 2017 Switched to tag_exist for structure testing.
+;	JM: May 23, 2017: Version 3.1
+;	JM: Jun 27, 2017: Switched to tag_exist for structure testing.
+;	JM: Nov. 7, 2017: Changed to FITS files from IDL save sets.
+;	JM: Nov. 7, 2017: Speed improvements.
+;	JM: Nov. 8, 2017: Freed memory
+;	JM: Nov.  9, 2017 : I don't want to repeat checks of the same file.
+;	JM: Nov.  9, 2017 : Assume all successful files are gzipped.
+
 ;COPYRIGHT
 ;Copyright 2016 Jayant Murthy
 ;
@@ -32,7 +38,7 @@ pro jude_read_vis, file, vis_dir, start_file = start_file, overwrite = overwrite
 ;Initialize variables
 	if (not(keyword_set(overwrite)))then overwrite = 0
 	if (n_elements(start_file) eq 0)then start_file = 0l
-
+	
 ;Search for all visible data files in the directory
 	nfiles = n_elements(file)
 	offname_save = "start"
@@ -40,14 +46,14 @@ pro jude_read_vis, file, vis_dir, start_file = start_file, overwrite = overwrite
 
 ;Work through all the files
 	for ifile = start_file, nfiles -1 do begin
-		
+time0 = systime(1)		
 ;Check for existence of file
 		fname = file_basename(file(ifile))
-		print,ifile,fname,string(10b),format="(i5,1x,a,a,$)"
+		print,ifile,fname,format="(i5,1x,a,)"
 		fname = strmid(fname, 0, strpos(fname,".fits"))
-		fout = vis_dir + fname + "_" + string(ifile) + ".sav"
+		fout = vis_dir + fname + "_" + string(ifile) + ".fits"
 		fout = strcompress(fout,/remove)
-		tst_file = file_test(fout)
+		tst_file = file_test(fout+".gz");JUDE always produces gzipped files
 		if ((tst_file eq 0) or (overwrite eq 1))then begin
 		
 ;Read files
@@ -80,9 +86,13 @@ pro jude_read_vis, file, vis_dir, start_file = start_file, overwrite = overwrite
 			imindex = 0l
 	
 ;********************** BEGIN DATA READ *******************************
-	
 			while (imindex lt nrows) do begin
-				q = where(im.time eq im[imindex].time, nq)
+;				print,"time taken: ", (systime(1)-time0),$
+;						"time left: ",(systime(1) - time0)/float(imindex)*(nrows - imindex),$
+;						string(13b),format="(a, f10.0, a, f10.0, a,$)"
+
+;I do this to save time so I don't have to search through the whole array each time.
+				q = where(im[imindex:(imindex+300)<(nrows -1)].time eq im[imindex].time, nq)
 ;There have to be 261 packets all with the same time
 				if (nq eq 261)then begin
 					times[nindex] = im[imindex].time
@@ -91,8 +101,7 @@ pro jude_read_vis, file, vis_dir, start_file = start_file, overwrite = overwrite
 						data = long(im[imindex].pixel) + 32768
 						for ipixel = 0l, 1007 do begin
 ;Unused data values are set to 0
-							if (data[ipixel] gt 0)then begin
-			
+							if (data[ipixel] gt 0)then begin			
 ;The data points go in order of increasing x (0 - 511) and then increasing y
 ;Unused points are set to zero and so it is easier to keep explicit count
 ;rather than calculate
@@ -118,10 +127,30 @@ pro jude_read_vis, file, vis_dir, start_file = start_file, overwrite = overwrite
 					imindex = imindex + 1
 				endelse
 			endwhile
+
 ;***************************** END DATA READ ***************************
-	
-			save,grid,times,data_hdr,file=fout
+
+;Write VIS files into FITS files
+			out_data = {out, grid: fltarr(512,512), times:0d}
+			siz = size(grid,/dim)
+			out_data = replicate(out_data, siz[2])
+			for i=0,nindex - 1 do begin
+				out_data[i].grid = grid[*,*,i]
+				out_data[i].times = times[i]
+			endfor
+			mwrfits,out_data,fout
+			if (ifile lt (nfiles - 5)) then begin
+				spawn,"gzip -f " + fout + " &"
+			endif else spawn,"gzip -f " + fout
+				
+;Explicitly release data
+delvar,grid
+delvar,out_data
+delvar,im
 		endif; We only do all this if the files already exist
 no_process:
+	str = "Time taken for file is " + string(systime(1) - time0) + " seconds"
+	print,strcompress(str)	
 	endfor
+		
 end
