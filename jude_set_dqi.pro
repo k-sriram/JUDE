@@ -37,6 +37,9 @@
 ;	JM:	May  23, 2017: Version 3.1
 ;	JM: Nov. 21, 2017: Changed to using common blocks
 ;	JM: Nov. 27, 2017: Was throwing away too much data from filter/frame checks.
+;	JM: Dec. 27, 2017: Error in indices.
+;	JM: Jan. 20, 2017: Error in filter selection.
+;	JM: Feb. 07, 2017: Was too rigid in filter selection
 ; COPYRIGHT:
 ;Copyright 2016 Jayant Murthy
 ;
@@ -108,7 +111,7 @@ function jude_set_dqi, data_hdr, out_hdr
 ;The filter from the file is sometimes wrong so I recalculate it based on
 ;the filter angle. I find the nominal filter angle below and use it to check
 ;later.
-	filter_fuzz = 1	;Allow a 1 degree recording error.
+	filter_fuzz = 3	;Allow a 3 degree recording error.
 	q = where(filter eq nom_filter)
 	nom_filter_angle = filter_angle(q)
 	filter_change = 0; I only want to use one filter in the image
@@ -136,9 +139,11 @@ function jude_set_dqi, data_hdr, out_hdr
 	for ielem = 0l, nelems - 1 do begin
 		index0 = max(where(att_new[index:*].time le data_l1a[ielem].time, nq0))
 		index1 = min(where(att_new[index:*].time ge data_l1a[ielem].time, nq1))
-		index0 = index0 + index
-		index1 = index1 + index
-		index  = index0
+		if (nq0 gt 0)then begin
+			index0 = index0 + index
+			index  = index0
+		endif
+		if (nq1 gt 0)then index1 = index1 + index
 		dqi_value = 0 ;No attitude information
 		if ((nq0 eq 0) or (nq1 eq 0))then $
 			data_l1a[ielem].dqi = data_l1a[ielem].dqi + dqi_value 
@@ -152,11 +157,13 @@ function jude_set_dqi, data_hdr, out_hdr
 	frame = data_l1a.frameno
 
 ;Get the filter
-	hist_f = histogram(hk_new.filter, min = 0, bin = 1)
-	max_filt = where(hist_f eq max(hist_f))
-	max_filt = max_filt[0]
-	q  = where(abs(max_filt - filter_angle) lt filter_fuzz, nq)
-	q = q[0]
+	if (n_elements(hk_new) gt 3)then begin
+		hist_f = histogram(hk_new.filter, min = 0, bin = 1)
+		max_filt = where(hist_f eq max(hist_f))
+		max_filt = max_filt[0]
+		q  = where(abs(max_filt - filter_angle) lt filter_fuzz, nq)
+		q = q[0]
+	endif else q = 0
 	nom_filter_angle = filter_angle[q]
 	nom_filter = filter[q]
 	sxaddpar,out_hdr,"FILTER", nom_filter,$

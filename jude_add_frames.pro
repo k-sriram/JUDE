@@ -66,6 +66,10 @@
 ;JM: Nov. 24, 2017: If par not defined, now reads from jude_params()
 ;JM: Dec. 08, 2017: Was not taking the reference frame when calculating times.
 ;JM: Dec. 09, 2017: Major speed increase.
+;JM: Dec. 10, 2017: Setting ref_frame wrong.
+;JM: Dec. 23, 2017: Change in limits of xoff and yoff. Should not affect much,
+;JM: Dec. 25, 2017: Using ref_frame from parameters.
+;JM: Jam. 03, 2018: Fixed out of bounds error.
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,14 +116,12 @@ if (n_elements(apply_dist) eq 0)then apply_dist = 0
 
 ;Reset max_frame if it is 0. Can be used as shorthand in the input.
 if (min_frame eq 0)then min_frame = $
-	min(where((data.dqi eq 0) and (abs(xoff) lt 1000) and $
-		(abs(yoff) lt 1000)))
+	min(where((data.dqi eq 0) and (abs(xoff) lt 1e5) and $
+		(abs(yoff) lt 1e5)))
 		
-if (n_elements(ref_frame) eq 0)then begin
-	ref_frame = min_frame
-	while (((abs(xoff[ref_frame]) gt 1000) or (abs(yoff[ref_frame]) gt 1000)) and $
+if (n_elements(ref_frame) eq 0)then ref_frame = par.ref_frame
+	while (((abs(xoff[ref_frame]) gt 1e5) or (abs(yoff[ref_frame]) gt 1e5)) and $
 		   (ref_frame lt (n_elements(data) - 2))) do ref_frame = ref_frame + 1
-endif
 if (max_frame eq 0) then max_frame =  n_elements(data)-1
 
 ;If the offsets are not defined, they are set to 0
@@ -200,8 +202,8 @@ endif
 ;Only if frame meets all the conditions
 	if ((data(ielem).nevents gt min_counts) and $
 		(data(ielem).nevents le max_counts) and $
-		(abs(xoff[ielem]) lt 1000) and $
-		(abs(yoff[ielem]) lt 1000) and $
+		(abs(xoff[ielem]) lt 1e5) and $
+		(abs(yoff[ielem]) lt 1e5) and $
 		(data(ielem).dqi le dqi_value))then begin
 
 ;Time interval
@@ -236,10 +238,10 @@ endif
 			if ((xindex ne old_xindex) or (yindex ne old_yindex))then begin
 				pixel_time = pixel_time + ishft*shft_times
 				shft_times =shift(times, xindex, yindex)
-				if (xindex gt 0)then shft_times[0:xindex-1,*] = 0
-				if (xindex lt 0)then shft_times[gxsize + xindex:gxsize - 1, *] = 0
-				if (yindex gt 0)then shft_times[*, 0:yindex-1] = 0
-				if (yindex lt 0)then shft_times[*, gysize + yindex:gxsize - 1] = 0
+				if (xindex gt 0)then shft_times[0:(xindex-1) < (gxsize - 1),*] = 0
+				if (xindex lt 0)then shft_times[(gxsize + xindex) > 0:gxsize - 1, *] = 0
+				if (yindex gt 0)then shft_times[*, 0:(yindex-1) < (gysize - 1)] = 0
+				if (yindex lt 0)then shft_times[*, (gysize + yindex) > 0:gxsize - 1] = 0
 				old_xindex = xindex
 				old_yindex = yindex
 				ishft = 0

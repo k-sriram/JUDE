@@ -11,6 +11,8 @@
 ;	FITS binary tables are written. Original Level 2 files are overwritten.
 ;MODIFICATION HISTORY
 ;	JM: Nov. 24, 2017 : 
+;	JM: Dec. 23, 2017 : Reset parameters each time.
+;	JM: Jan. 17, 2018 : Work both ways from FUV to NUV
 ;COPYRIGHT
 ;Copyright 2016 Jayant Murthy
 ;
@@ -46,10 +48,10 @@ function read_offset_file, offset_file, times, xoff, yoff
 	endelse
 end
 
-pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir, params = params
+pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir
 
 ;Parameters
-	if (n_elements(params) eq 0)then params = jude_params()
+	params = jude_params()
 	
 ;File definitions
 	if (n_elements(nuv_events_dir) eq 0)then $
@@ -60,7 +62,10 @@ pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir, para
 		fuv_images_dir = params.def_fuv_dir + params.image_dir
 	nuv_files 	= file_search(nuv_events_dir, "*", count = nuvfiles)
 	fuv_files 	= file_search(fuv_events_dir, "*", count = fuvfiles)
-	if ((nuvfiles eq 0) or (fuvfiles eq 0))then goto,nodata
+	if ((nuvfiles eq 0) or (fuvfiles eq 0))then begin
+		print,"No files."
+		goto,nodata
+	endif
 
 ;Read NUV offsets from the files.
 	nuv_start = dblarr(nuvfiles)	;Starting time in each file
@@ -68,6 +73,7 @@ pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir, para
 	ielem     = 0l
 	for ifile = 0, nuvfiles - 1 do begin
 		nuv_d2 = mrdfits(nuv_files[ifile], 1, nuvhdr, /silent)
+		nuv_detect = strcompress(sxpar(nuvhdr,"DETECTOR"),/rem)
 		q = where(nuv_d2.dqi eq 0, nq)
 		if (nq gt 0)then begin
 			mintime = min(nuv_d2[q].time)
@@ -85,17 +91,19 @@ pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir, para
 
 ;Run through the UV files
 	for ifile = 0, fuvfiles - 1 do begin
+		params = jude_params()
 		match_time = 0
 
 ;Read the Event Lists from the UV data
 		fuvdata = mrdfits(fuv_files[ifile], 1, fuvhdr, /silent)
 		nelems = n_elements(fuvdata)
+		fuv_detect = strcompress(sxpar(fuvhdr,"DETECTOR"),/rem)
 
 ;Initialize the offset array.
 		fuv_offsets = replicate({offsets, time:0d, xoff:0., yoff:0., att:0}, nelems)
 		fuv_offsets.time = fuvdata.time
-		fuv_offsets.xoff = -1000.
-		fuv_offsets.yoff = -1000.
+		fuv_offsets.xoff = -1e6
+		fuv_offsets.yoff = -1e6
 		fuv_mintime = min(fuvdata.time)
 		fuv_maxtime = max(fuvdata.time)
 		itime = 0
@@ -154,10 +162,18 @@ pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir, para
 				nuv_yoff  = nuv_yoff[qnuv]
 				quadterp,nuv_times, nuv_xoff, fuv_offsets.time, xoff
 				quadterp,nuv_times, nuv_yoff, fuv_offsets.time, yoff
-				ang =  -35.0000
-				fuvdata.xoff = (xoff*cos(ang/!radeg) - yoff*sin(ang/!radeg))
-				fuvdata.yoff = -(xoff*sin(ang/!radeg) + yoff*cos(ang/!radeg))
-
+				if ((nuv_detect eq "NUV") and (fuv_detect eq "FUV"))then begin 
+					ang =  -35.0000
+					fuvdata.xoff = (xoff*cos(ang/!radeg) - yoff*sin(ang/!radeg))
+					fuvdata.yoff = -(xoff*sin(ang/!radeg) + yoff*cos(ang/!radeg))
+				endif else if ((nuv_detect eq "FUV") and (fuv_detect eq "NUV"))then begin 
+					ang =  145.0000
+					fuvdata.xoff = -((xoff*cos(ang/!radeg) - yoff*sin(ang/!radeg)))
+					fuvdata.yoff = -(-(xoff*sin(ang/!radeg) + yoff*cos(ang/!radeg)))
+				endif else begin
+					print,"Mismatch in detectors: ",nuv_detect," and ",fuv_detect
+					goto,nodata
+				endelse
 ;If there are no NUV offsets we set the offsets as unknown.				
 				ielem = 0l
 				while ((fuvdata[ielem].time lt min(nuv_times)) and $
@@ -168,8 +184,8 @@ pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir, para
 				ielem = nelems - 1
 				while ((fuvdata[ielem].time gt max(nuv_times)) and $
 						(ielem ge 0)) do begin
-					fuvdata[ielem].xoff = -1000
-					fuvdata[ielem].yoff = -1000
+					fuvdata[ielem].xoff = -1e6
+					fuvdata[ielem].yoff = -1e6
 					ielem = ielem - 1
 				endwhile
 			endif
@@ -224,6 +240,7 @@ pro jude_match_nuv_offsets, nuv_events_dir, fuv_events_dir, fuv_images_dir, para
 				spawn,"gzip -fv " + imname
 			endif
 		endif else print,"No match for ",file_basename(fuv_files[ifile])
+		if (n_elements(ref_frame) gt 0)then delvar,ref_frame
 	endfor
 nodata:
 end

@@ -12,7 +12,7 @@
 ;				ra_cent:	Central RA in degrees
 ;				dec_cent:	Central Dec in degrees
 ;				Fov:		Field of view in degrees
-;				pixel_size:	Size of each pixel in degrees
+;				pixel_size:	Size of each pixel in arcseconds
 ; OPTIONAL KEYWORDS:
 ;
 ; OUTPUTS:
@@ -37,7 +37,8 @@
 ;-
 
 pro jude_coadd, input_dir, output_file, ra_cent, dec_cent, fov,$
-				pixel_size = pixel_size, out_dir = out_dir
+				pixel_size, out_dir = out_dir,filter=filter, $
+				detector = detector
 
 ;The files to be added are all in input_files
 	input_files = file_search(input_dir, "*.fits*", count = nfiles)
@@ -47,18 +48,27 @@ pro jude_coadd, input_dir, output_file, ra_cent, dec_cent, fov,$
 	endif
 
 ;The default coordinates are the average over all the files.
-	for ifile = 0, nfiles -1 do begin
+good_file = 0
+	for ifile = 0, nfiles - 1 do begin
 		im_hdr = headfits(input_files[ifile])
-		if (ifile eq 0)then begin
+		astr_done = strcompress(sxpar(im_hdr, "ASTRDONE"),/remove)
+		if ((n_elements(ra_im) eq 0) and (astr_done eq "TRUE"))then begin
 			ra_im  = float(sxpar(im_hdr, "CRVAL1"))
 			dec_im = float(sxpar(im_hdr, "CRVAL2"))
-		endif else begin
+			good_file = good_file + 1
+		endif else if (astr_done eq "TRUE")then begin
 			ra_im  = ra_im  + float(sxpar(im_hdr, "CRVAL1"))
 			dec_im = dec_im + float(sxpar(im_hdr, "CRVAL2"))
-		endelse
+			good_file = good_file + 1
+		endif
 	endfor
-	ra_im  = ra_im/nfiles
-	dec_im = dec_im/nfiles
+		
+	if (n_elements(ra_im) eq 0)then begin
+		print,"No Astrometry."
+		goto, no_proc
+	endif
+	ra_im  = ra_im/good_file
+	dec_im = dec_im/good_file
 		
 ;Ask for parameters if they are not defined
 	if (n_elements(ra_cent) eq 0)   then begin
@@ -111,6 +121,27 @@ pro jude_coadd, input_dir, output_file, ra_cent, dec_cent, fov,$
 		data   = mrdfits(input_files[ifile], 0, inphdr, /silent)
 		dtime  = mrdfits(input_files[ifile], 1, inpthdr, /silent)
 		if (n_elements(dtime) eq 1)then dtime = data*0 + 1.
+		
+;Check filter
+		naxes = sxpar(inphdr,"NAXIS")
+		if (naxes ne 2)then begin
+			print,"Not an image file"
+			goto,skip_file
+		endif
+		if (n_elements(filter) gt 0)then begin
+			obsfilt = sxpar(inphdr,"FILTER")
+			if (strcompress(obsfilt,/rem) ne strupcase(filter))then begin
+				print,"Filter does not match: ", obsfilt
+				goto, skip_file
+			endif
+		endif
+		if (n_elements(detector) gt 0)then begin
+			obsdet = sxpar(inphdr,"DETECTOR")
+			if (strcompress(obsdet, /rem) ne strupcase(detector))then begin
+				print,"Detector does not match: ", obsdet
+				goto, skip_file
+			endif
+		endif
 		
 ;Get astrometry for input file
 		inpastr = 0
@@ -186,9 +217,13 @@ pro jude_coadd, input_dir, output_file, ra_cent, dec_cent, fov,$
 			endif ;nqx
 		endfor ;ix
 
+		device,window_state= window_state
+		if (window_state[0] eq 0)then window,xs=naxis,ysize=naxis
+		tv,bytscl(grid[*,*,ifile],0,max(grid[*,*,ifile])/10.)
+		
 		if ((delta_x lt 1) or (delta_y lt 1))then begin
-			print,"WARNING: This program is only intended to be used when"
-			print,"the output resolution is mcuh less than the input."
+			print,"WARNING: This program is may not be accurate if the output"
+			print,"pixel size is much less than the input."
 			print,"input res: ", pix_xsize, pix_ysize
 			print,"output res: ",inp_pix_xsize, inp_pix_ysize
 		endif

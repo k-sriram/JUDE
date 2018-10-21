@@ -35,7 +35,7 @@
 
 ;************************* READ_SIMBAD_STARS ***********************
 ;If I have a list of stars from Simbad, I use that.
-function read_simbad_stars, sim_file_name, names, ra, dec, stype, mag, xtest, ytest, ztest
+function read_simbad_stars,  names, ra, dec, stype, mag, xtest, ytest, ztest
 
 ;Read stars from simbad using the file I've already created. 
 ;The default name is sim-script, if it doesn't exist, I ask what to do
@@ -48,8 +48,8 @@ function read_simbad_stars, sim_file_name, names, ra, dec, stype, mag, xtest, yt
 		print, $
 			'format object form1 "%IDLIST(1) : %COO(d2;C) : %OTYPE(S) : %FLUXLIST(B;F) "'
 		print, 'set radius 60m'
-		print, 'query coo ' + strcompress(ra_cent,/rem)  + 'd' + $
-								  strcompress(dec_cent,/rem) + 'd'
+		print, 'query coo ' + strcompress(ra,/rem)  + 'd' + $
+								  strcompress(dec,/rem) + 'd'
 		print, 'format display'
 		sim_file_name = 'sim-script'
 		while(file_test(sim_file_name) eq 0) do begin
@@ -95,6 +95,16 @@ function read_simbad_stars, sim_file_name, names, ra, dec, stype, mag, xtest, yt
 		endif
 	endfor
 
+;Get rid of sources where we have no magnitude
+	s = where(mag lt 20, ns)
+	if (ns gt 0)then begin
+		ra    = ra[s]
+		dec   = dec[s]
+		stype = stype[s]
+		mag   = mag[s]
+		names = names[s]
+	endif
+		
 ;Order by magnitude remembering that the brightest have the least magnitude.
 	s = sort(mag)
 	ra    = ra[s]
@@ -115,6 +125,8 @@ end
 pro find_point_sources, new_im, x, y, f,new_max_value,xoff,yoff
 	x = 0 & y = 0 & f = 0
 	thresh = .002
+	siz = size(new_im,/dimensions)
+	resolution = siz[0]/512
 	while ((n_elements(x) lt 6) or (n_elements(x) gt 20))do begin
 		find,new_im,x,y,f,s,r,thresh,1.2,[-1.0,1.0],[.2,1.0]
 		print,n_elements(x)," stars found with a threshold of ",thresh
@@ -140,8 +152,6 @@ pro find_point_sources, new_im, x, y, f,new_max_value,xoff,yoff
 		y = y[q]
 		f = f[q]
 	endif
-	tv,bytscl(rebin(new_im,512,512),0,new_max_value),xoff,yoff
-	plots,/dev,x/8+xoff,y/8+yoff,/psym,col=255,symsize=3
 	
 end
 ;**********************END FIND_POINT_SOURCES **********************
@@ -176,80 +186,205 @@ function set_limits, grid2, xstar, ystar, boxsize, resolution,$
 	endif else h1 = grid2[xmin:xmax, ymin:ymax]
 	return,h1
 end
+
+function check_star_position, new_im, xstar, ystar,new_max_value, xmin, ymin
+	boxsize = 20
+	siz = size(new_im, /dimension)
+	resolution = siz[0]/512
+	
+	h1 = set_limits(new_im, xstar, ystar, boxsize, resolution, xmin = xmin, ymin = ymin)
+	siz = size(h1, /dimensions)
+	r1 = mpfit2dpeak(h1, a1)
+	if (finite(a1[4]) and finite(a1[5]))then begin
+		xstar = xmin + a1[4]
+		ystar = ymin + a1[5]
+	endif else begin
+		tcent = total(h1)
+		xcent = total(total(h1, 2)*indgen(siz[0]))/tcent
+		ycent = total(total(h1, 1)*indgen(siz[1]))/tcent
+		xstar = xmin + xcent
+		ystar = ymin + ycent
+	endelse
+	boxsize = 5
+	h1 = set_limits(new_im, xstar, ystar, boxsize, resolution, xmin = xmin, ymin = ymin)
+	siz = size(h1, /dimensions)
+	r1 = mpfit2dpeak(h1, a1)
+	if (finite(a1[4]) and finite(a1[5]) and (a1[1] gt 0))then begin
+		xstar = xmin + a1[4]
+		ystar = ymin + a1[5]
+		star_found = 1
+	endif else begin
+		star_found = 0
+	endelse
+	tv,bytscl(rebin(h1,siz[0]*(512/siz[0]),siz[1]*(512/siz[1])) ,0,new_max_value),512,0
+	plots,(xstar - xmin)*(512/siz[0]),(ystar - ymin)*(512/siz[1]),/psym,symsize=3,col=255,/dev,thick=2
+
+wset,0
+	return,star_found
+end
+
 ;*****************END DISPLAY PROGRAMS***************************
 
-pro plot_simbad, ref_file,  refra, refdec, refx, refy, ref_max_value = ref_max_value
+pro plot_simbad, ref_file,  galex_file, refra, refdec, refx, refy, ref_max_value = ref_max_value
 
 ;Initialization
-	if (n_elements(ref_max_value) eq 0)then ref_max_value = 0.0002
 	device,window_state = window_state
 	if (window_state[0] eq 0)then $
 			window, 0, xs = 1024, ys = 512, xp = 10, yp = 500
 		
 ;Read data from image files
 	ref_im   = mrdfits(ref_file, 0, ref_hdr, /silent)
+	ref_time = mrdfits(ref_file, 1, thdr,/silent)
+	q=where(ref_time eq 0,nq)
+	if (nq gt 0)then ref_im[q] = 0
+
+	siz = size(ref_im, /dimensions)
+	resolution = siz[0]/512
+;Has atrometry been done?
+	if (strcompress(sxpar(ref_hdr, "ASTRDONE"),/rem) ne "TRUE")then begin
+		ans=''
+		ra = sxpar(ref_hdr, "RA_PNT")
+		dec = sxpar(ref_hdr, "DEC_PNT")
+		sxaddpar,ref_hdr,"CRVAL1",ra
+		sxaddpar,ref_hdr,"CRVAL2",dec
+		sxaddpar,ref_hdr,"CRPIX1",512*resolution/2
+		sxaddpar,ref_hdr,"CRPIX2",512*resolution/2
+		sxaddpar,ref_hdr,"CDELT1",-0.000911456/resolution
+		sxaddpar,ref_hdr,"CDELT2",0.000911456/resolution
+		sxaddpar,ref_hdr,"CTYPE1","RA---TAN"
+		sxaddpar,ref_hdr,"CTYPE2","DEC--TAN"
+	endif else begin
+		ra  = sxpar(ref_hdr, "CRVAL1")
+		dec = sxpar(ref_hdr, "CRVAL2")
+	endelse
 	extast, ref_hdr, ref_astr
-	ref_time = mrdfits(ref_file, 1, ref_thdr, /silent)
+
+;Change image scale	
 	ans='y'
+	if (n_elements(ref_max_value) eq 0)then ref_max_value = 0.0002 else $
+		ans = 'n'
+
 	while (ans eq 'y')do begin
 		tv,bytscl(rebin(ref_im,512,512), 0, ref_max_value),0,0
-		print,"Change scale? "
-		ans = get_kbrd(1)
-		if (ans eq 'y')then read,"New scale factor: ",ref_max_value
+		ans_val = ""
+		read,"Enter new scale; Press return if none ",ans_val
+		if (ans_val ne "")then ref_max_val = float(ans_val) else ans='n'
 	endwhile
+	
 ;Read stars from simbad using the file I've already created. The name
 ;of the file must be simbad.csv, just because it was easier.
 	nstars = read_simbad_stars(names, ra, dec, stype, mag, xtest, ytest, ztest)
-
-;If I've already figured out my useful stars, I don't need to find them again.
-	if (n_elements(ref_stars) gt 0)then begin
-		refra  = ref_stars[*,0]
-		refdec = ref_stars[*,1]
-		ad2xy, refra, refdec, ref_astr, refxp, refyp
-	endif else begin
-		find_point_sources, ref_im, refxp, refyp, reffp, ref_max_value, 0, 0
-stop
-xy2ad, refxp, refyp, ref_astr, refra, refdec
-	endelse
-	nrefpoints = n_elements(refxp)
-		tv,bytscl(rebin(ref_im,512,512), 0, ref_max_value),512,0
+	ad2xy,ra,dec,ref_astr,xsimb,ysimb
+	plots,/dev,/psym,col=255,thick=2,xsimb/resolution,ysimb/resolution
 	
-;I now have a list of stars with good astrometry where I've identified the 
-;x and y with ra and dec.
-;I calculate the ra and dec in Cartesian coordinates.
-	radeg = 180d/!dpi
-	refx = cos(refra/radeg)*cos(refdec/radeg)
-	refy = sin(refra/radeg)*cos(refdec/radeg)
-	refz = sin(refdec/radeg)
-	simb_stars = lonarr(nrefpoints)
-	for istar = 0, nrefpoints - 1 do begin
-		plots,/dev,refxp[istar]/8+512,refyp[istar]/8,psym=6,symsize=3
-		dst = acos(refx[istar]*xtest + refy[istar]*ytest + refz[istar]*ztest)*radeg*3600d
-		simb_stars[istar] = where(dst eq min(dst))
-		str = "Identified NUV " + string(istar) + " with "
-		str = str + " " + names[simb_stars[istar]] + " at " + string(min(dst))
-		print,strcompress(str)
+	newxp = fltarr(3)
+	newyp = fltarr(3)
+	ans = ""
+	read,"Would you like to modify the astrometry?",ans
+	if (ans eq "y")then begin
+		a = 1000
+		while (a gt 512) do begin
+			print,"Select star"
+			cursor,a,b,/dev & print,a,b
+			if (a gt 512)then print,"Invalid point clicked"
+			wait,1 ;(Avoiding double clicks)
+		endwhile
+		a = a*resolution
+		b = b*resolution
+		star_found = check_star_position(ref_im, a, b, ref_max_value, xmin, ymin)
+		newxp[0] = a
+		newyp[0] = b
+	endif
+	
+stop	
+;Now find point sources in the image.
+	find_point_sources, ref_im, refxp, refyp, reffp, ref_max_value, 0, 0
+	dxp = sqrt((refxp/resolution - 256)^2 + (refyp/resolution - 256)^2)
+;Our preference is sources near the center.
+	q = where(dxp lt 256, nq)
+	if (nq gt 0)then begin
+		dxp   = dxp[q]
+		refxp = refxp[q]
+		refyp = refyp[q]
+		reffp = reffp[q]
+	endif
+	q = sort(dxp)
+	dxp   = dxp[q]
+	refxp = refxp[q]
+	refyp = refyp[q]
+	reffp = reffp[q]
+	nsources = n_elements(refxp)
+
+;Now to find possible identifications
+	if (nsources gt 1) then begin
+		refang = sqrt((refxp[1] - refxp[0])^2 + (refyp[1] - refyp[0])^2)
+;Are there any Simbad sources which match this angle
+		nsimb = n_elements(xsimb)
+		grid_simb = fltarr(nsimb, nsimb)
+		for i = 0, nsimb - 2 do begin
+			for j = i+1, nsimb - 1 do begin
+				grid_simb[i, j] = $
+				sqrt((xsimb[i] - xsimb[j])^2 + (ysimb[i] - ysimb[j])^2)
+		   endfor
+	   endfor
+	   dst=where(abs(grid_simb -refang) lt 10, ndst)
+	   if (ndst gt 0)then begin
+;Let's try solving and see where we get
+			for isimb = 0, nsimb - 1 do begin
+				x1 = dst[isimb] mod nsimb
+				y1 = dst[isimb]/nsimb
+				newra  =  [ra[x1], ra[y1]]
+				newdec =  [dec[y1], dec[y1]]
+				newxp = [refxp[0], refxp[1]]
+				newyp = [refyp[0], refyp[1]]
+				new_hdr = ref_hdr
+				starast, newra, newdec, newxp, newyp, cd, hdr=new_hdr,/right
+				extast,new_hdr,new_astr
+			stop
+			endfor
+		endif
+		
+	stop
+	endif
+	
+	grid_sources = fltarr(nsources, nsources)
+	for i = 0, nsources - 1 do $
+		for j=0, nsources - 1 do $
+			grid_sources[i, j] = $
+				sqrt((refxp[i] - refxp[j])^2 + (refyp[i] - refyp[j])^2)
+				
+;Let's see if we can get matches
+	for isource = 0, nsources - 2 do begin
+		for isimb = 0, nsimb - 1 do begin
+			for j = isource + 1, nsources - 1 do begin
+				q=where(abs(grid_simb[isimb,*] - grid_sources[isource, j]) lt 3, nq)
+				if (nq eq 0)then break
+			endfor
+			if (nq gt 0)then print,isource," ",isimb," ",names[isimb],stype[isimb],mag[isimb]
+		endfor
 	endfor
-	
-ans=''
-print,"continue?"
-ans = get_kbrd(1)
-
-;Check each star
-for istar = 0, nrefpoints - 1 do begin
-	tv,bytscl(rebin(ref_im,512,512), 0, ref_max_value),0,0
-	plots,/dev,refxp[istar]/8.,refyp[istar]/8.,psym=6,symsize=3,thick=2,col=255
-	h1 = set_limits(ref_im, refxp[istar], refyp[istar], 5, 8, xmin=xmin, ymin = ymin)
-	siz = size(h1, /dimens)
-	tv,bytscl(rebin(h1, siz(0)*5, siz(1)*5),0, ref_max_value),512,0
-	r1 = mpfit2dpeak(h1, a1)
-	plots,(refxp[istar]-xmin)*5 + 512,(refyp[istar] - ymin)*5,/psym,/dev,symsize=3,thick=2,col=255
-	plots,a1[4]*5 + 512, a1[5]*5,psym=6,/dev,symsize=3,thick=2,col=255
-	dst = sqrt((a1[4] - (refxp[istar] - xmin))^2 + (a1[5] - (refyp[istar] - ymin))^2)
-	print,names[simb_stars[istar]]," ",dst
-	ans = get_kbrd(1)
-endfor
-	
-	
+			
+;Pick stars
+npick = 0
+isource = 0
+while (npick le 2) do begin
+	read,"Select first Simbad source (-1 to skip)",isimb
+	if (isimb ge 0)then begin
+		if (n_elements(ref_ra) eq 0)then begin
+			ref_ra = ra[isimb]
+			ref_dec = dec[isimb]
+			ref_x = refxp[isource]
+			ref_y = refyp[isource]
+		endif else begin
+			ref_ra  = [ref_ra, ra[isimb]]
+			ref_dec = [ref_dec, dec[isimb]]
+			ref_x   = [ref_x, refxp[isource]]
+			ref_y   = [ref_y, refyp[isource]]
+		endelse
+		npick = npick + 1
+	endif
+	isource = isource + 1
+endwhile
+stop
 noproc:	
 	end

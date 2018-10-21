@@ -45,6 +45,11 @@
 ;	JM: Aug. 28, 2017 : Was writing header incorrectly for second extension.
 ;	JM: Nov.  7, 2017 : Cosmetic changes.
 ;   JM: Nov. 24, 2017 : Removed incorrect DQI setting.
+;	JM: Dec. 11, 2017 : If redone then reread the files.
+;	JM: Dec. 18, 2017 : If uv_base_dir is not defined I deduce from the header
+;	JM: Jan  03, 2018 : Added option to reset offsets
+;	JM: Jan. 16, 2018 : Interface changes.
+;	JM: Jan. 20, 2018 : Added median filter to offsets.
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,8 +69,9 @@
 ;************************ Defaults *********************************
 ;Defaults = 0: Normal interactive behavior. If defaults > 0, always noninteractive.
 ;Defaults = 1: Run automatically with standard defaults.
-;Defaults = 2: Don't run centroid
+;Defaults = 2: Don't run centroid; also median filter data by 500 frames
 ;Defaults = 4: Use VIS offsets.
+;Defaults = 8; Reset offsets
 
 function set_limits_inter, grid2, xstar, ystar, boxsize, resolution,$
 					 xmin = xmin, ymin = ymin
@@ -84,21 +90,6 @@ function set_limits_inter, grid2, xstar, ystar, boxsize, resolution,$
 		h1 = fltarr(2*boxsize*resolution, 2*boxsize*resolution)
 	endif else h1 = grid2[xmin:xmax, ymin:ymax]
 	return,h1
-end
-
-
-pro uv_or_vis, xoff_vis, yoff_vis, xoff_uv, yoff_uv, xoff_sc, yoff_sc, dqi
-
-		print,"Do you want to use visible offsets; default is UV? :"
-		ans=get_kbrd(1)
-		if (ans eq "y")then begin
-			xoff_sc = xoff_vis
-			yoff_sc = yoff_vis
-		endif else begin
-			print, "Using UV offsets"
-			xoff_sc = xoff_uv
-			yoff_sc = yoff_uv
-		endelse
 end
 
 pro get_offsets, data_l2, offsets, xoff_vis, yoff_vis, xoff_uv, yoff_uv, $
@@ -224,10 +215,6 @@ pro plot_diagnostics, data_l2, offsets, data_hdr0, im_hdr, fname, grid, $
 		ymax = 10
 	endelse
 	q = where(offsets.att eq 0, nq)
-	if (nq gt 0)then begin
-		ymin = min([ymin, min(xoff_vis[q]), min(yoff_vis[q])])
-		ymax = max([ymax, max(xoff_vis[q]), max(yoff_vis[q])])
-	endif
 
 ;Plot the offsets
 	plot,data_l2.time  - data_l2[0].time, xoff_uv,charsize=2,yrange = [ymin, ymax],$
@@ -275,7 +262,9 @@ pro plot_diagnostics, data_l2, offsets, data_hdr0, im_hdr, fname, grid, $
 		if ((nxstar gt 0) and (nystar gt 0))then begin
 			h1 = set_limits_inter(grid, xstar, ystar, 10, params.resolution)
 			r1 = mpfit2dpeak(h1, a1)
-			print,"width of star is: ",a1[2],a1[3]	
+			print,"width of star is: ",a1[2],a1[3]
+			tv,bytscl(h1, 0, max_im_value),0,512
+			plots,/dev,xstar/params.resolution,ystar/params.resolution,psym=4,symsize=2,col=255,thick=3
 		endif
 	endif
 end
@@ -296,7 +285,7 @@ pro jude_interactive, data_file, uv_base_dir, data_l2, grid, offsets, params = p
 ;If we have a window open keep it, otherwise pop up a default window
 	device,window_state = window_state
 	if (window_state[0] eq 0)then $
-		window, 0, xs = 1024, ys = 512, xp = 10, yp = 500
+		window, 0, xs = 1024, ys = 700, xp = 10, yp = 500
 
 ;The image brightness may vary so define a default which may change
 	if (n_elements(max_im_value) eq 0)then max_im_value  = 0.000002
@@ -319,10 +308,9 @@ pro jude_interactive, data_file, uv_base_dir, data_l2, grid, offsets, params = p
 ;data file
 	params.min_frame = sxpar(data_hdr0, "MINFRAME")
 	params.max_frame = sxpar(data_hdr0, "MAXFRAME")
+	params.ref_frame = sxpar(data_hdr0, "REFFRAME")
 	if ((params.max_frame eq 0) or (params.max_frame gt (ndata_l2 -1)))then $
 		params.max_frame = ndata_l2 - 1
-	start_frame = params.min_frame
-	end_frame 	= params.max_frame
 	save_dqi  = data_l2.dqi
 	dqi       = data_l2.dqi
 	
@@ -336,11 +324,16 @@ pro jude_interactive, data_file, uv_base_dir, data_l2, grid, offsets, params = p
 		params.max_counts = dave + dstd*5
 
 ;Name definitions
+		detector = strcompress(sxpar(data_hdr0,"detector"), /remove)
 		if (n_elements(data_dir) eq 0)then data_dir = ''
 		fname = file_basename(data_file)
 		f1 = strpos(fname, "level1")
 		f2 = strpos(fname, "_", f1+8)
 		fname = strmid(fname, 0, f2)
+		if (n_elements(uv_base_dir) eq 0)then begin
+			if (detector eq "NUV")then uv_base_dir = "nuv/"
+			if (detector eq "FUV")then uv_base_dir = "fuv/"
+		endif
 		image_dir   = data_dir + uv_base_dir + params.image_dir
 		events_dir  = data_dir + uv_base_dir + params.events_dir
 		png_dir     = data_dir + uv_base_dir + params.png_dir
@@ -357,7 +350,6 @@ pro jude_interactive, data_file, uv_base_dir, data_l2, grid, offsets, params = p
 			sxaddhist,"No offsets from visible",off_hdr, /comment
 			print,"No visible offsets available."
 		endif
-		detector = strcompress(sxpar(data_hdr0,"detector"), /remove)
 		calc_uv_offsets, offsets, xoff_vis, yoff_vis, detector
 		xoff_uv = data_l2.xoff
 		yoff_uv = data_l2.yoff
@@ -373,7 +365,6 @@ pro jude_interactive, data_file, uv_base_dir, data_l2, grid, offsets, params = p
 				xoff_uv*params.resolution, yoff_uv*params.resolution,$
 				/notime)
 		endelse
-
 check_diag:
 ;Plot the image plus useful diagnostics
 		plot_diagnostics, data_l2, offsets, data_hdr0, im_hdr, fname, grid, $
@@ -381,10 +372,10 @@ check_diag:
 					
 		if (defaults ne 0)then ans = 'n' else ans = "y"
 		while (ans eq "y") do begin
+			ans_val = ""
+			read,"Enter new image scaling (enter if ok)?",ans_val
+			if (ans_val ne "")then max_im_value = float(ans_val) else ans = "n"
 			tv,bytscl(rebin(grid, 512, 512), 0, max_im_value)
-			print,"Redisplay?"
-			ans = get_kbrd(1)
-			if (ans eq 'y')then read, max_im_value
 		endwhile
 		
 ;Check to see if there is any good data
@@ -419,9 +410,6 @@ if (param_ans eq -3)then stop
 							xoff_sc, yoff_sc, dqi
 							
 ;Figure out what we want to do.
-			if (defaults eq 0)then $
-				UV_OR_VIS, xoff_vis, yoff_vis, xoff_uv, yoff_uv, $
-					  xoff_sc, yoff_sc, dqi
 					  
 			if ((defaults and 4) eq 4)then begin
 				print,"Using VIS data"
@@ -431,16 +419,30 @@ if (param_ans eq -3)then stop
 		
 			run_centroid = 'y'
 			if (defaults eq 0)then begin
-				print,"Run centroid (y/n)? Default is y (r to reset offsets)."
+				print,"Run centroid (y/n/v/r)? (v to us VIS, r to reset offsets)."
 				run_centroid = get_kbrd(1)
 				if (run_centroid eq 'r')then begin
 					xoff_sc = xoff_sc*0
 					yoff_sc = yoff_sc*0
 				endif
+				if (run_centroid eq 'v')then begin
+					xoff_sc = xoff_vis
+					yoff_sc = yoff_vis
+				endif
 				if (run_centroid ne 'n')then run_centroid = 'y'
 			endif
-			if ((defaults and 2) eq 2)then run_centroid = 'n'
-
+			if ((defaults and 2) eq 2)then begin
+				run_centroid = 'n'
+				if (n_elements(xoff_sc) gt 1000)then begin
+					xoff_sc = median(xoff_sc,500)
+					yoff_sc = median(yoff_sc,500)
+				endif
+			endif
+			if ((defaults and 8) eq 8)then begin
+				xoff_sc = xoff_sc*0
+				yoff_sc = yoff_sc*0
+			endif
+			
 ;Registration is obsolete so we won't run it anymore.
 			run_registration = 'n'
 ;			if ((defaults eq 0) and (run_centroid ne 'y'))then begin
@@ -494,7 +496,6 @@ if (ans ne "d")then begin
 
 			if (run_centroid eq 'y')then begin
 print,"Starting centroid"
-				nbin = params.fine_bin
 				if (strupcase(detector) eq "FUV")then $
 					thg1 = params.ps_threshold_fuv else $
 					thg1 = params.ps_threshold_nuv
@@ -502,11 +503,10 @@ print,"Starting centroid"
 				xoff_cent = xoff_sc
 				yoff_cent = yoff_sc
 				if (defaults eq 0)then display = 1 else display=0
-				
 				jude_centroid, data_file, grid, p, xcent, ycent,$
 					xoff = xoff_cent, yoff = yoff_cent,$
 					/nosave, defaults = defaults, /new_star,$
-					max_im_value = max_im_value, display = display
+					display = display,medsize = params.medsize
 				xoff_sc = xoff_cent
 				yoff_sc = yoff_cent
 			endif
@@ -517,11 +517,12 @@ print,"Starting centroid"
 				data_l2.dqi = dqi
 				nframes = jude_add_frames(data_l2, grid, pixel_time,  params, $
 							xoff_sc*params.resolution, yoff_sc*params.resolution,$
-							/notime, debug = 100)
+							/notime, debug = 1000, ref_frame = ref_frame)
 			endif else begin
 				data_l2.dqi = dqi
 				nframes = jude_add_frames(data_l2, grid, pixel_time,  params, $
-							xoff_sc*params.resolution, yoff_sc*params.resolution, /notime)
+							xoff_sc*params.resolution, yoff_sc*params.resolution, /notime, $
+							ref_frame = ref_frame)
 			endelse
 			
 			print,"Total of ",nframes," frames ",nframes*.035," seconds"
@@ -531,9 +532,9 @@ print,"Starting centroid"
 			endelse			
 			while (ans eq "y") do begin
 				tv,bytscl(rebin(grid,512,512),0,max_im_value)
-				print,"Redisplay? "
-				ans=get_kbrd(1)
-				if (ans eq "y")then read,max_im_value
+				ans_val = ""
+				read,"Enter new image scaling (press return if ok)  ", ans_val
+				if (ans_val ne "")then max_im_value = float(ans_val) else ans = "n"
 			endwhile
 			if (defaults eq 0)then begin
 				ans = "n"
@@ -632,26 +633,24 @@ print,"Starting centroid"
 					sxaddpar,data_hdr0, "XCENT", xcent, "XPOS of centroid star"
 					sxaddpar,data_hdr0, "YCENT", ycent, "YPOS of centroid star"
 				endif
-				if (defaults le 10)then begin
 				print,"writing events file to ",t
-					mwrfits,temp,t,data_hdr0,/create,/no_comment
-					if (n_elements(off_hdr) gt 0)then begin
-						mwrfits,offsets,t,off_hdr,/no_comment
-					endif else mwrfits,offsets,t
-					spawn,"gzip -fv " + t
-				endif
+				mwrfits,temp,t,data_hdr0,/create,/no_comment
+				if (n_elements(off_hdr) gt 0)then begin
+					mwrfits,offsets,t,off_hdr,/no_comment
+				endif else mwrfits,offsets,t
+				spawn,"gzip -fv " + t
 			endif ;End write files
 			if (defaults eq 0)then begin
 				ans = "n"
 				print,"Do you want to run with different parameters?"
 				ans=get_kbrd(1)
 			endif else ans = "n"
-			if (ans ne 'r')then begin
-				data_l2.xoff = xoff_sc
-				data_l2.yoff = yoff_sc
-				xoff_uv		 = xoff_sc
-				yoff_uv		 = yoff_sc
-			endif else if (ans eq 'r') then ans = 'y'
+			if (ans eq 'r')then begin
+				data_l2   = mrdfits(data_file,1,data_hdr0,/silent)
+			endif
+			if (ans eq 'r') then ans = 'y'
+			data_l2.xoff = xoff_sc
+			data_l2.yoff = yoff_sc
 			data_l2.dqi = save_dqi
 			if (ans eq "y")then goto, check_diag
 		endif

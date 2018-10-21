@@ -17,6 +17,7 @@
 ;	JM: Nov. 8, 2017: Freed memory
 ;	JM: Nov.  9, 2017 : I don't want to repeat checks of the same file.
 ;	JM: Nov.  9, 2017 : Assume all successful files are gzipped.
+;	JM: Jun   1, 2018: Syntax error which did not seem to affect GDL
 
 ;COPYRIGHT
 ;Copyright 2016 Jayant Murthy
@@ -49,7 +50,7 @@ pro jude_read_vis, file, vis_dir, start_file = start_file, overwrite = overwrite
 time0 = systime(1)		
 ;Check for existence of file
 		fname = file_basename(file(ifile))
-		print,ifile,fname,format="(i5,1x,a,)"
+		print,ifile,fname,format="(i5,1x,a)"
 		fname = strmid(fname, 0, strpos(fname,".fits"))
 		fout = vis_dir + fname + "_" + string(ifile) + ".fits"
 		fout = strcompress(fout,/remove)
@@ -133,7 +134,9 @@ time0 = systime(1)
 ;Write VIS files into FITS files
 			out_data = {out, grid: fltarr(512,512), times:0d}
 			siz = size(grid,/dim)
-			out_data = replicate(out_data, siz[2])
+			if (n_elements(siz eq 3)) then begin
+				out_data = replicate(out_data, siz[2])
+			endif else goto,no_process
 			for i=0,nindex - 1 do begin
 				out_data[i].grid = grid[*,*,i]
 				out_data[i].times = times[i]
