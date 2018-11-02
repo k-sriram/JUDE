@@ -51,6 +51,7 @@
 ;	JM: Jan. 16, 2018 : Interface changes.
 ;	JM: Jan. 20, 2018 : Added median filter to offsets.
 ;   KS: Nov, 01, 2018 : Modified check_params such that boxsize can be edited.
+;   KS: Nov, 01, 2018 : Support for not writing png files.
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -570,8 +571,10 @@ print,"Starting centroid"
 				jude_create_uvit_hdr,data_hdr0,out_hdr
 
 ;Write PNG file
-				t = data_dir + uv_base_dir + params.png_dir+fname+".png"
-				write_png,t,tvrd()
+				if (params.is_png_written eq 1) then begin
+					t = data_dir + uv_base_dir + params.png_dir+fname+".png"
+					write_png,t,tvrd()
+				endif
 			
 ;Write FITS image file
 				nom_filter = strcompress(sxpar(out_hdr, "filter"),/remove)

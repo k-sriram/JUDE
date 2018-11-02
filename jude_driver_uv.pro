@@ -93,6 +93,7 @@
 ;	JM: Nov. 16, 2017 : Skip processing if JUDE_VERIFY_FILES_DONE exists.
 ;	JM: Nov. 21, 2017 : Switch to Common Blocks for the Level 1 files.
 ;	JM: Jan. 03, 2017 : Don't write out single frame files.
+;   KS: Nov, 01, 2018 : Support for not writing png files.
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -406,8 +407,10 @@ endif
 	endelse
 	
 ;Write PNG file
-	write_png,png_name,bytscl(grid,0,.0001)
-
+    if (params.is_png_written eq 1) then begin
+	    write_png,png_name,bytscl(grid,0,.0001)
+	endif
+	
 ;Write FITS image file
 	detector = strcompress(sxpar(out_hdr, "detector"),/remove)
 	nom_filter = strcompress(sxpar(out_hdr, "filter"),/remove)
