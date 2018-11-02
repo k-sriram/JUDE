@@ -18,6 +18,7 @@
 ;JM: Jun. 27, 2017: Extra space in file spec.
 ;JM: Aug. 18, 2017: Runs with visible offfsets as default.
 ;JM: Dec. 25, 2017: Reset parameters each time.
+;KS: Nov, 01, 2018: Added ability to run JUDE_INTERACTIVE interactively
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -108,7 +109,7 @@ if (file_test(uv_base_dir + params.temp_dir) gt 0)then $
 	for ifile = 0, nfiles - 1 do begin
 		params = jude_params()
 		JUDE_INTERACTIVE,files[ifile], uv_base_dir, data, grid, offsets, $
-			 params = params, defaults=8
+			 params = params, defaults=params.uvclp_interactive
 	endfor
 	obs_file_in  = uv_base_dir + "observation.csv"
 	obs_file_out = uv_base_dir + "final_obslog.csv"
