@@ -18,6 +18,7 @@
 ;JM: Jun. 27, 2017: Extra space in file spec.
 ;JM: Aug. 18, 2017: Runs with visible offfsets as default.
 ;JM: Dec. 25, 2017: Reset parameters each time.
+;KS: Nov, 01, 2018: Support for not writing png files.
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -103,7 +104,9 @@ if (file_test(uv_base_dir + params.temp_dir) gt 0)then $
 	
 ;Write the final data.
 	files = file_search(uv_base_dir + params.events_dir, "*.fits.gz", count = nfiles)
-	spawn,"rm " + uv_base_dir + params.png_dir + "*.png"
+	if (params.is_png_written eq 1) then begin
+		spawn,"rm " + uv_base_dir + params.png_dir + "*.png"
+	endif
 	
 	for ifile = 0, nfiles - 1 do begin
 		params = jude_params()
