@@ -13,6 +13,7 @@
 ;	JM: Dec. 22, 2017: Added reference frame
 ;   KS: Nov, 01, 2018: Added uvclp_interactive
 ;   KS: Nov, 01, 2018: Added is_png_written
+;   KS: Nov, 11, 2018: Moved the option of running jude_interactive interactively from params to calling sequence.
 ;COPYRIGHT
 ;Copyright 2016 Jayant Murthy
 ;
@@ -58,7 +59,6 @@ function jude_params
 		vis_off_dir: "vis_off/",		$; Output directory for offset files
 		vis_add_dir: "vis_add/",		$; Summed vis files
 		temp_dir:	"jude_temp/",		$; Temporary directory
-		uvclp_interactive: 8,           $; Should JUDE_UV_CLEANUP be run interactively 0: Yes, 8: No
 		is_png_written: 1               $; Should png files be written
 	}
 return, params
