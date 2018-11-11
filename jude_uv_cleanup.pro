@@ -8,7 +8,8 @@
 ; OPTIONAL INPUTS:
 ; OPTIONAL KEYWORDS:
 ; 			FUV:	Run for FUV files.
-;			NUV:	Run for NUV files
+;			NUV:	Run for NUV files.
+;   INTERACTIVE:    Run the program interactively.
 ; OUTPUTS:
 ; RESTRICTIONS
 ;			The JUDE programs must be in the path.
@@ -20,6 +21,7 @@
 ;JM: Dec. 25, 2017: Reset parameters each time.
 ;KS: Nov, 01, 2018: Added ability to run JUDE_INTERACTIVE interactively
 ;KS: Nov, 01, 2018: Support for not writing png files.
+;KS: Nov, 11, 2018: Moved the option of running jude_interactive interactively from params to calling sequence.
 ;Copyright 2016 Jayant Murthy
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +36,7 @@
 ;   See the License for the specific language governing permissions and
 ;   limitations under the License.
 ;-
-pro jude_uv_cleanup, fuv = fuv, nuv = nuv
+pro jude_uv_cleanup, fuv = fuv, nuv = nuv, interactive = interactive
 
 ;The parameters are read using JUDE_PARAMS
 ;Assuming the path is set correctly, a personalized file can be in
@@ -44,6 +46,12 @@ pro jude_uv_cleanup, fuv = fuv, nuv = nuv
 ;Which detector plus checks.
 	if (n_elements(fuv) eq 0)then fuv = 0
 	if (n_elements(nuv) eq 0)then nuv = 0
+	if (n_elements(interactive) eq 0) then begin
+	    interactive = 8
+	else
+	    interactive = 0
+	endif
+	
 	if ((fuv + nuv) ne 1)then begin
 		ans = 0
 		read,"Enter 1 for FUV or 2 for NUV: ", ans
@@ -112,7 +120,7 @@ if (file_test(uv_base_dir + params.temp_dir) gt 0)then $
 	for ifile = 0, nfiles - 1 do begin
 		params = jude_params()
 		JUDE_INTERACTIVE,files[ifile], uv_base_dir, data, grid, offsets, $
-			 params = params, defaults=params.uvclp_interactive
+			 params = params, defaults=interactive
 	endfor
 	obs_file_in  = uv_base_dir + "observation.csv"
 	obs_file_out = uv_base_dir + "final_obslog.csv"
