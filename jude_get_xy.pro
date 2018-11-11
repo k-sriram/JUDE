@@ -68,14 +68,10 @@ function extract_coord,c1, c2, parity
 	parity = parity mod 2
 	
 	x = float(x)
-	q = where(c2 gt 0,nq)
-	if (nq gt 0)then begin
-		fx  = c2*0
-		for i = 0,nq - 1 do fx(q(i)) = ishft(c2(q(i)), -1) and 63
-		q = where(fx ge 32,nq)
-		if (nq gt 0)then fx[q] = fx[q] - 64
-		x = x + float(fx)*.03125
-	endif
+	fx = c2/2 and 63
+	q = where(fx ge 32,nq)
+	if (nq gt 0)then fx[q] = fx[q] - 64
+	x = x + float(fx)*.03125
 	return,x
 end
 
