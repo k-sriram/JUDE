@@ -140,7 +140,7 @@ function check_params, params
 		print,"Parameter to change?"
 		read,"-1 to continue, -2 to exit, -3 to debug: ",ans_no
 		if (((ans_no ge 0) and (ans_no le 6)) or (ans_no eq 9))then begin
-			ans_val = 0
+			ans_val = 0l
 			read,"New value?",ans_val
 			params.(ans_no) = ans_val
 		endif
