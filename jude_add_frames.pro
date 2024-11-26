@@ -236,7 +236,7 @@ endif
 			yindex = round(yoff[ielem]-yoff_start)
 			
 			if ((xindex ne old_xindex) or (yindex ne old_yindex))then begin
-				pixel_time = pixel_time + ishft*shft_times
+				pixel_time = pixel_time + (ishft+1)*shft_times
 				shft_times =shift(times, xindex, yindex)
 				if (xindex gt 0)then shft_times[0:(xindex-1) < (gxsize - 1),*] = 0
 				if (xindex lt 0)then shft_times[(gxsize + xindex) > 0:gxsize - 1, *] = 0
